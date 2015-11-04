@@ -53,15 +53,16 @@ import httplib
 import json
 
 def parse_params():
-    bits = os.path.basename(sys.argv[0]).split('_', 2)
-    name = bits[0]
-    plugname = bits[1:]
+    basename = os.path.basename(sys.argv[0])
+    verbose = not basename.endswith('-')
+    basename = basename.rstrip('-')
+    plugname = basename.split('_', 2)[1:]
     params = {
         'type': plugname[0],
         'op': 'config' if sys.argv[-1] == 'config' else 'fetch',
         'core': plugname[1] if len(plugname) > 1 else '',
         'params': {},
-        'verbose': not name.endswith('-')
+        'verbose': verbose
     }
     if plugname[0] in[ 'qps', 'requesttimes']:
         data = params['core'].rsplit('_', 1)
@@ -237,34 +238,68 @@ class SolrCoreMBean:
 CACHE_GRAPH_TPL = """multigraph solr_{core}_{cacheType}_hit_rates
 graph_category solr
 graph_title Solr {core} {cacheName} Hit rates
-graph_order lookups hits inserts
+graph_order lookups_{core} hits_{core} inserts_{core}
 graph_scale no
 graph_vlabel Hit Rate
 graph_args -u 100 --rigid
-lookups.label Cache lookups
-lookups.graph no
-lookups.min 0
-lookups.type DERIVE
-inserts.label Cache misses
-inserts.min 0
-inserts.draw STACK
-inserts.cdef inserts,lookups,/,100,*
-inserts.type DERIVE
-hits.label Cache hits
-hits.min 0
-hits.draw AREA
-hits.cdef hits,lookups,/,100,*
-hits.type DERIVE
+lookups_{core}.label Cache lookups
+lookups_{core}.graph no
+lookups_{core}.min 0
+lookups_{core}.type DERIVE
+inserts_{core}.label Cache misses
+inserts_{core}.min 0
+inserts_{core}.draw STACK
+inserts_{core}.cdef inserts_{core},lookups_{core},/,100,*
+inserts_{core}.type DERIVE
+hits_{core}.label Cache hits
+hits_{core}.min 0
+hits_{core}.draw AREA
+hits_{core}.cdef hits_{core},lookups_{core},/,100,*
+hits_{core}.type DERIVE
 
 multigraph solr_{core}_{cacheType}_size
 graph_title Solr {core} {cacheName} Size
 graph_args -l 0
 graph_category solr
 graph_vlabel Size
-size.label Size
-size.draw LINE2
-evictions.label Evictions
-evictions.draw LINE2
+size_{core}.label Size
+size_{core}.draw LINE2
+evictions_{core}.label Evictions
+evictions_{core}.draw LINE2
+
+"""
+
+CORES_CACHE_GRAPH_TPL = """multigraph solr_{core}_{cacheType}_hit_rates
+graph_category solr
+graph_title Solr {cacheName} Hit rates
+graph_order lookups_{core} hits_{core} inserts_{core}
+graph_scale no
+graph_vlabel Hit Rate
+graph_args -u 100 --rigid
+lookups_{core}.label Cache lookups
+lookups_{core}.graph no
+lookups_{core}.min 0
+lookups_{core}.type DERIVE
+inserts_{core}.label Cache misses
+inserts_{core}.min 0
+inserts_{core}.draw STACK
+inserts_{core}.cdef inserts_{core},lookups_{core},/,100,*
+inserts_{core}.type DERIVE
+hits_{core}.label Cache hits
+hits_{core}.min 0
+hits_{core}.draw AREA
+hits_{core}.cdef hits_{core},lookups_{core},/,100,*
+hits_{core}.type DERIVE
+
+multigraph solr_{core}_{cacheType}_size
+graph_title Solr {core} {cacheName} Size
+graph_args -l 0
+graph_category solr
+graph_vlabel Size
+size_{core}.label Size
+size_{core}.draw LINE2
+evictions_{core}.label Evictions
+evictions_{core}.draw LINE2
 
 """
 
@@ -299,9 +334,9 @@ s99thpcrequesttime_{core}.type GAUGE
 s99thpcrequesttime_{core}.graph yes
 """
 
-NUMDOCS_GRAPH_TPL = """graph_title Solr Docs %s
+NUMDOCS_GRAPH_TPL = """graph_title Solr Docs {core}
 graph_vlabel docs
-docs.label Docs
+docs_{core}.label Docs
 graph_category solr"""
 
 INDEXSIZE_GRAPH_TPL = """graph_args --base 1024 -l 0 
@@ -341,8 +376,8 @@ class SolrMuninGraph:
     def _getMBean(self, core):
         return SolrCoreMBean(self.hostport, self.solrurl, core)
 
-    def _cacheConfig(self, cacheType, cacheName):
-        return CACHE_GRAPH_TPL.format(core=self.params['core'], cacheType=cacheType, cacheName=cacheName)
+    def _cacheConfig(self, cacheType, cacheName, core=None):
+        return CACHE_GRAPH_TPL.format(core=core or self.params['core'], cacheType=cacheType, cacheName=cacheName)
 
     def _format4Value(self, value):
         if isinstance(value, basestring):
@@ -431,7 +466,9 @@ class SolrMuninGraph:
         return '\n'.join(results)
 
     def numdocsConfig(self):
-        return NUMDOCS_GRAPH_TPL % self.params['core']
+        cores = self._getCores()
+        graphs = [NUMDOCS_GRAPH_TPL.format(core=core) for core in cores]
+        return '\n'.join(graphs)
 
     def numdocs(self):
         cores = self._getCores()
@@ -470,7 +507,9 @@ class SolrMuninGraph:
         return '\n'.join(['used.value %d' % memory['used'], 'max.value %d' % memory['max']])
 
     def documentcacheConfig(self):
-        return self._cacheConfig('documentcache', 'Document Cache')
+        cores = self._getCores()
+        graphs = [self._cacheConfig('documentcache', 'Document Cache', core=core) for core in cores]
+        return '\n'.join(graphs)
 
     def documentcache(self):
         cores = self._getCores()
@@ -480,7 +519,9 @@ class SolrMuninGraph:
         return '\n'.join(results)
 
     def filtercacheConfig(self):
-        return self._cacheConfig('filtercache', 'Filter Cache')
+        cores = self._getCores()
+        graphs = [self._cacheConfig('filtercache', 'Filter Cache', core=core) for core in cores]
+        return '\n'.join(graphs)
 
     def filtercache(self):
         cores = self._getCores()
@@ -490,7 +531,9 @@ class SolrMuninGraph:
         return '\n'.join(results)
 
     def fieldvaluecacheConfig(self):
-        return self._cacheConfig('fieldvaluecache', 'Field Value Cache')
+        cores = self._getCores()
+        graphs = [self._cacheConfig('fieldvaluecache', 'Field Value Cache', core=core) for core in cores]
+        return '\n'.join(graphs)
 
     def fieldvaluecache(self):
         cores = self._getCores()
@@ -500,7 +543,9 @@ class SolrMuninGraph:
         return '\n'.join(results)
 
     def queryresultcacheConfig(self):
-        return self._cacheConfig('queryresultcache', 'Query Cache')
+        cores = self._getCores()
+        graphs = [self._cacheConfig('queryresultcache', 'Query Cache', core=core) for core in cores]
+        return '\n'.join(graphs)
 
     def queryresultcache(self):
         cores = self._getCores()
