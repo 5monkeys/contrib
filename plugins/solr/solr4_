@@ -399,7 +399,7 @@ class SolrMuninGraph:
         cores = self._getCores()
         for c in cores:
             mbean = self._getMBean(c)
-            results.append('qps_%s.value %d' % (c, mbean.requestcount(self.params['params']['handler'])))
+            results.append('qps_%s.value %f' % (c, mbean.qps(self.params['params']['handler'])))
         return '\n'.join(results)
 
     def requesttimesConfig(self):
