@@ -434,8 +434,12 @@ class SolrMuninGraph:
         return NUMDOCS_GRAPH_TPL % self.params['core']
 
     def numdocs(self):
-        mbean = self._getMBean(self.params['core'])
-        return 'docs.value %d' % mbean.numdocs(**self.params['params'])
+        cores = self._getCores()
+        results = []
+        for c in cores:
+            mbean = self._getMBean(c)
+            results.append('docs_%s.value %d' % (c, mbean.numdocs(**self.params['params'])))
+        return '\n'.join(results)
 
     def indexsizeConfig(self):
         cores = self._getCores()
@@ -469,25 +473,41 @@ class SolrMuninGraph:
         return self._cacheConfig('documentcache', 'Document Cache')
 
     def documentcache(self):
-        return self._cacheFetch('documentcache')
+        cores = self._getCores()
+        results = []
+        for c in cores:
+            results.append(self._cacheFetch('documentcache', core=c))
+        return '\n'.join(results)
 
     def filtercacheConfig(self):
         return self._cacheConfig('filtercache', 'Filter Cache')
 
     def filtercache(self):
-        return self._cacheFetch('filtercache')
+        cores = self._getCores()
+        results = []
+        for c in cores:
+            results.append(self._cacheFetch('filtercache', core=c))
+        return '\n'.join(results)
 
     def fieldvaluecacheConfig(self):
         return self._cacheConfig('fieldvaluecache', 'Field Value Cache')
 
     def fieldvaluecache(self):
-        return self._cacheFetch('fieldvaluecache')
+        cores = self._getCores()
+        results = []
+        for c in cores:
+            results.append(self._cacheFetch('fieldvaluecache', core=c))
+        return '\n'.join(results)
 
     def queryresultcacheConfig(self):
         return self._cacheConfig('queryresultcache', 'Query Cache')
 
     def queryresultcache(self):
-        return self._cacheFetch('queryresultcache')
+        cores = self._getCores()
+        results = []
+        for c in cores:
+            results.append(self._cacheFetch('queryresultcache', core=c))
+        return '\n'.join(results)
 
 if __name__ == '__main__':
     params = parse_params()
