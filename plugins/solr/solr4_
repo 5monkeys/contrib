@@ -478,7 +478,7 @@ class SolrMuninGraph:
 
 if __name__ == '__main__':
     params = parse_params()
-    SOLR_HOST_PORT = os.environ.get('host_port', 'localhost:8080').replace('http://', '')
+    SOLR_HOST_PORT = os.environ.get('host_port', 'localhost:8983').replace('http://', '')
     SOLR_URL  = os.environ.get('url', '/solr')
     if SOLR_URL[0] != '/':
         SOLR_URL = '/' + SOLR_URL 
