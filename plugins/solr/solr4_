@@ -53,12 +53,15 @@ import httplib
 import json
 
 def parse_params():
-    plugname = os.path.basename(sys.argv[0]).split('_', 2)[1:]
+    bits = os.path.basename(sys.argv[0]).split('_', 2)
+    name = bits[0]
+    plugname = bits[1:]
     params = {
         'type': plugname[0],
         'op': 'config' if sys.argv[-1] == 'config' else 'fetch',
         'core': plugname[1] if len(plugname) > 1 else '',
-        'params': {}
+        'params': {},
+        'verbose': not name.endswith('-')
     }
     if plugname[0] in[ 'qps', 'requesttimes']:
         data = params['core'].rsplit('_', 1)
@@ -350,20 +353,29 @@ class SolrMuninGraph:
             return "%.6f"
         return "%s"
 
-    def _cacheFetch(self, cacheType, fields = None):
+    def _cacheFetch(self, cacheType, fields=None, core=None):
         fields = fields or ['size', 'lookups', 'hits', 'inserts', 'evictions']
         hits_fields = ['lookups', 'hits', 'inserts']
         size_fields = ['size', 'evictions']
         results = []
-        solrmbean = self._getMBean(self.params['core'])
+        core = core or self.params['core']
+        solrmbean = self._getMBean(core)
         data = getattr(solrmbean, cacheType)()
-        results.append('multigraph solr_{core}_{cacheType}_hit_rates'.format(core=self.params['core'], cacheType=cacheType))
+        if self.params['verbose']:
+            results.append('multigraph solr_{core}_{cacheType}_hit_rates'.format(core=core, cacheType=cacheType))
         for label in hits_fields:
             vformat = self._format4Value(data[label])
-            results.append(("%s.value " + vformat) % (label, data[label]))
-        results.append('multigraph solr_{core}_{cacheType}_size'.format(core=self.params['core'], cacheType=cacheType))
+            if self.params['verbose']:
+                results.append(("%s.value " + vformat) % (label, data[label]))
+            else:
+                results.append(("%s_%s.value " + vformat) % (label, core, data[label]))
+        if self.params['verbose']:
+            results.append('multigraph solr_{core}_{cacheType}_size'.format(core=core, cacheType=cacheType))
         for label in size_fields:
-            results.append("%s.value %d" % (label, data[label]))
+            if self.params['verbose']:
+                results.append("%s.value %d" % (label, data[label]))
+            else:
+                results.append("%s_%s.value %d" % (label, core, data[label]))
         return "\n".join(results)
 
     def config(self, mtype):
@@ -412,7 +424,8 @@ class SolrMuninGraph:
         results = []
         for c in cores:
             mbean = self._getMBean(c)
-            results.append('multigraph {core}_requesttimes'.format(core=c))
+            if self.params['verbose']:
+                results.append('multigraph {core}_requesttimes'.format(core=c))
             for k, time in mbean.requesttimes(self.params['params']['handler']).items():
                 results.append('s%s_%s.value %.5f' % (k.lower(), c, time))
         return '\n'.join(results)
