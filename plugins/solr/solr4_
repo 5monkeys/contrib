@@ -231,37 +231,46 @@ class SolrCoreMBean:
 #############################################################################
 # Graph Templates
 
-CACHE_GRAPH_TPL = """multigraph solr_{core}_{cacheType}_hit_rates
+CACHE_GRAPH_TPL_HEADER = """graph_category solr
+graph_title Solr {cacheName} Hit rates
+graph_scale no
+graph_vlabel Hit Rate
+graph_args -u 100 --rigid
+"""
+CACHEHITS_GRAPH_TPL_HEADER = """multigraph solr_{core}_{cacheType}_hit_rates
 graph_category solr
 graph_title Solr {core} {cacheName} Hit rates
 graph_order lookups hits inserts
 graph_scale no
-graph_vlabel Hit Rate
+graph_vlabel Hit Rate / {cacheName} Size
 graph_args -u 100 --rigid
-lookups.label Cache lookups
-lookups.graph no
-lookups.min 0
-lookups.type DERIVE
-inserts.label Cache misses
-inserts.min 0
-inserts.draw STACK
-inserts.cdef inserts,lookups,/,100,*
-inserts.type DERIVE
-hits.label Cache hits
-hits.min 0
-hits.draw AREA
-hits.cdef hits,lookups,/,100,*
-hits.type DERIVE
+"""
+CACHEHITS_GRAPH_TPL = """lookups_{core}.label Cache lookups {core}
+lookups_{core}.graph no
+lookups_{core}.min 0
+lookups_{core}.type DERIVE
+inserts_{core}.label Cache misses {core}
+inserts_{core}.min 0
+inserts_{core}.draw STACK
+inserts_{core}.cdef inserts_{core},lookups_{core},/,100,*
+inserts_{core}.type DERIVE
+hits_{core}.label Cache hits {core}
+hits_{core}.min 0
+hits_{core}.draw AREA
+hits_{core}.cdef hits_{core},lookups_{core},/,100,*
+hits_{core}.type DERIVE
 
-multigraph solr_{core}_{cacheType}_size
+"""
+CACHESIZE_GRAPH_TPL_HEADER = """multigraph solr_{core}_{cacheType}_size
 graph_title Solr {core} {cacheName} Size
 graph_args -l 0
 graph_category solr
 graph_vlabel Size
-size.label Size
-size.draw LINE2
-evictions.label Evictions
-evictions.draw LINE2
+"""
+CACHESIZE_GRAPH_TPL = """size.label Size
+size_{core}.draw LINE2
+evictions_{core}.label Evictions {core}
+evictions_{core}.draw LINE2
 
 """
 
@@ -296,10 +305,10 @@ s99thpcrequesttime_{core}.type GAUGE
 s99thpcrequesttime_{core}.graph yes
 """
 
-NUMDOCS_GRAPH_TPL = """graph_title Solr Docs %s
+NUMDOCS_GRAPH_TPL = """graph_title Solr Docs
 graph_vlabel docs
-docs.label Docs
-graph_category solr"""
+graph_category solr
+"""
 
 INDEXSIZE_GRAPH_TPL = """graph_args --base 1024 -l 0 
 graph_vlabel Bytes
