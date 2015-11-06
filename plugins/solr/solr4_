@@ -344,7 +344,21 @@ class SolrMuninGraph:
         return SolrCoreMBean(self.hostport, self.solrurl, core)
 
     def _cacheConfig(self, cacheType, cacheName):
-        return CACHE_GRAPH_TPL.format(core=self.params['core'], cacheType=cacheType, cacheName=cacheName)
+        cores = self._getCores()
+        if self.params['multigraph']:
+            TEMPLATE = CACHEHITS_GRAPH_TPL_HEADER + CACHEHITS_GRAPH_TPL + CACHESIZE_GRAPH_TPL_HEADER + CACHESIZE_GRAPH_TPL
+            graphs = []
+            for core in cores:
+                graphs.append(TEMPLATE.format(core=core, cacheType=cacheType, cacheName=cacheName))
+            return '\n\n'.join(graphs)
+        else:
+            TEMPLATE = CACHEHITS_GRAPH_TPL + CACHESIZE_GRAPH_TPL
+            graphs = []
+            for core in cores:
+                graphs.append(TEMPLATE.format(core=core, cacheType=cacheType, cacheName=cacheName))
+            gorder = ','.join('%s_%s' % (f, c) for c in cores for f in ['size', 'lookups', 'hits', 'inserts', 'evictions'])
+            return CACHE_GRAPH_TPL_HEADER.format(
+                cacheName=cacheName, gorder=gorder) + '\n'.join(graphs)
 
     def _format4Value(self, value):
         if isinstance(value, basestring):
@@ -355,20 +369,23 @@ class SolrMuninGraph:
             return "%.6f"
         return "%s"
 
-    def _cacheFetch(self, cacheType, fields = None):
-        fields = fields or ['size', 'lookups', 'hits', 'inserts', 'evictions']
-        hits_fields = ['lookups', 'hits', 'inserts']
-        size_fields = ['size', 'evictions']
+    def _cacheFetch(self, cacheType, fields=None):
+        cores = self._getCores()
         results = []
-        solrmbean = self._getMBean(self.params['core'])
-        data = getattr(solrmbean, cacheType)()
-        results.append('multigraph solr_{core}_{cacheType}_hit_rates'.format(core=self.params['core'], cacheType=cacheType))
-        for label in hits_fields:
-            vformat = self._format4Value(data[label])
-            results.append(("%s.value " + vformat) % (label, data[label]))
-        results.append('multigraph solr_{core}_{cacheType}_size'.format(core=self.params['core'], cacheType=cacheType))
-        for label in size_fields:
-            results.append("%s.value %d" % (label, data[label]))
+        for core in cores:
+            hits_fields = ['lookups', 'hits', 'inserts']
+            size_fields = ['size', 'evictions']
+            solrmbean = self._getMBean(core)
+            data = getattr(solrmbean, cacheType)()
+            if self.params['multigraph']:
+                results.append('multigraph solr_{core}_{cacheType}_hit_rates'.format(core=core, cacheType=cacheType))
+            for label in hits_fields:
+                vformat = self._format4Value(data[label])
+                results.append(("%s_%s.value " + vformat) % (label, core, data[label]))
+            if self.params['multigraph']:
+                results.append('multigraph solr_{core}_{cacheType}_size'.format(core=core, cacheType=cacheType))
+            for label in size_fields:
+                results.append("%s_%s.value %d" % (label, core, data[label]))
         return "\n".join(results)
 
     def config(self, mtype):
@@ -390,13 +407,13 @@ class SolrMuninGraph:
 
     def qpsConfig(self):
         cores = self._getCores()
-        graph = [QPSCORE_GRAPH_TPL.format(core=c, gtype='LINESTACK1') for pos,c in enumerate(cores) ]
+        graph = [QPSCORE_GRAPH_TPL.format(core=c, gtype='STACK') for pos,c in enumerate(cores) ]
         return QPSMAIN_GRAPH_TPL.format(
             cores_qps_graphs='\n'.join(graph), 
             handler=self.params['params']['handler'], 
             core=self.params['core'], 
             cores_qps_cdefs='%s,%s' % (','.join(map(lambda x: 'qps_%s' % x, cores)),','.join(['+']*(len(cores)-1))), 
-            gorder=','.join(cores)
+            gorder=' '.join('qps_%s' % c for c in cores)
         )
 
     def qps(self):
@@ -409,22 +426,32 @@ class SolrMuninGraph:
 
     def requesttimesConfig(self):
         cores = self._getCores()
-        graphs = [REQUESTTIMES_GRAPH_TPL.format(core=c, handler=self.params['params']['handler']) for c in cores ]
-        return '\n'.join(graphs)
+        if self.params['multigraph']:
+            TEMPLATE = REQUESTTIMES_GRAPH_TPL_HEADER + REQUESTTIMES_GRAPH_TPL
+            graphs = []
+            for core in cores:
+                graphs.append('multigraph {core}_requesttimes'.format(core=core))
+                graphs.append(TEMPLATE.format(core=core, handler=self.params['params']['handler']))
+            return '\n'.join(graphs)
+        else:
+            graphs = [REQUESTTIMES_GRAPH_TPL.format(core=c) for c in cores]
+            header = REQUESTTIMES_GRAPH_TPL_HEADER.format(core='', handler=self.params['params']['handler'])
+            return header + '\n'.join(graphs)
 
     def requesttimes(self):
         cores = self._getCores()
         results = []
         for c in cores:
             mbean = self._getMBean(c)
-            results.append('multigraph {core}_requesttimes'.format(core=c))
+            if self.params['multigraph']:
+                results.append('multigraph {core}_requesttimes'.format(core=c))
             for k, time in mbean.requesttimes(self.params['params']['handler']).items():
                 results.append('s%s_%s.value %.5f' % (k.lower(), c, time))
         return '\n'.join(results)
 
     def numdocsConfig(self):
         cores = self._getCores()
-        graphs = ['docs_{core}.label Docs {core}'.format(core=core) for core in cores]
+        graphs = ['docs_{core}.label {core} Docs'.format(core=core) for core in cores]
         return NUMDOCS_GRAPH_TPL + '\n'.join(graphs)
 
     def numdocs(self):
