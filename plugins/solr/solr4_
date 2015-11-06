@@ -53,12 +53,16 @@ import httplib
 import json
 
 def parse_params():
-    plugname = os.path.basename(sys.argv[0]).split('_', 2)[1:]
+    basename = os.path.basename(sys.argv[0])
+    multigraph = not basename.endswith('-')
+    basename = basename.rstrip('-')
+    plugname = basename.split('_', 2)[1:]
     params = {
         'type': plugname[0],
         'op': 'config' if sys.argv[-1] == 'config' else 'fetch',
         'core': plugname[1] if len(plugname) > 1 else '',
-        'params': {}
+        'params': {},
+        'multigraph': multigraph
     }
     if plugname[0] in[ 'qps', 'requesttimes']:
         data = params['core'].rsplit('_', 1)
